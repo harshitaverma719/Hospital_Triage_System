@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Hospital Triage — Dashboard</title>
+<style>
+  /* ---- design tokens, light and dark ------------------------------ */
+  :root{
+    --bg:#f4f6f8; --panel:#ffffff; --line:#d9dee4; --ink:#16202b;
+    --muted:#5d6b7a; --accent:#1b6ca8; --accent-ink:#ffffff;
+    --s1:#c0392b; --s2:#d98024; --s3:#c9a227; --s4:#3f8f54; --s5:#4a6a86;
+    --free:#e8f0e9; --busy:#fbe9e7;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#11161b; --panel:#1a2128; --line:#2c3842; --ink:#e7edf3;
+      --muted:#93a3b3; --accent:#4b9fd8; --accent-ink:#0d1317;
+      --s1:#e05a4e; --s2:#e59a4a; --s3:#d7bd4a; --s4:#54ad6c; --s5:#7d9ab5;
+      --free:#17241b; --busy:#2a1a18;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#11161b; --panel:#1a2128; --line:#2c3842; --ink:#e7edf3;
+    --muted:#93a3b3; --accent:#4b9fd8; --accent-ink:#0d1317;
+    --s1:#e05a4e; --s2:#e59a4a; --s3:#d7bd4a; --s4:#54ad6c; --s5:#7d9ab5;
+    --free:#17241b; --busy:#2a1a18;
+    color-scheme: dark;
+  }
+
+  :root{ box-sizing:border-box;
+         padding-top:env(safe-area-inset-top,0px);
+         padding-bottom:env(safe-area-inset-bottom,0px); }
+  *,*::before,*::after{ box-sizing:inherit; }
+
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.5 "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  }
+  header{
+    background:var(--panel); border-bottom:1px solid var(--line);
+    padding:16px 20px; display:flex; flex-wrap:wrap; gap:12px;
+    align-items:center; justify-content:space-between;
+  }
+  h1{ font-size:18px; margin:0; letter-spacing:.2px; }
+  h1 span{ display:block; font-size:12px; font-weight:400; color:var(--muted); }
+  main{ max-width:1100px; margin:0 auto; padding:20px; }
+
+  .loader{
+    background:var(--panel); border:1px dashed var(--line); border-radius:10px;
+    padding:18px; margin-bottom:20px;
+  }
+  .loader p{ margin:0 0 12px; color:var(--muted); font-size:13px; }
+  .files{ display:flex; flex-wrap:wrap; gap:10px; }
+  label.file{
+    display:inline-flex; align-items:center; gap:8px; cursor:pointer;
+    background:var(--accent); color:var(--accent-ink); border-radius:7px;
+    padding:9px 14px; font-size:13px; font-weight:600;
+  }
+  label.file input{ display:none; }
+  .loaded{ font-size:12px; color:var(--muted); margin-top:10px; }
+  .loaded b{ color:var(--ink); }
+
+  .stats{ display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); margin-bottom:22px; }
+  .stat{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .stat .n{ font-size:26px; font-weight:700; line-height:1.1; }
+  .stat .k{ font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; }
+
+  .tabs{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+  .tab{
+    border:1px solid var(--line); background:var(--panel); color:var(--muted);
+    border-radius:7px; padding:8px 14px; font-size:13px; cursor:pointer;
+  }
+  .tab.on{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:600; }
+
+  section{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  section h2{ font-size:14px; margin:0 0 12px; text-transform:uppercase; letter-spacing:.7px; color:var(--muted); }
+  .wrap{ overflow-x:auto; }
+  table{ width:100%; border-collapse:collapse; font-size:14px; }
+  th,td{ text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th{ font-size:12px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); }
+  tbody tr:last-child td{ border-bottom:none; }
+
+  .sev{ display:inline-block; min-width:22px; text-align:center; border-radius:5px;
+        padding:2px 7px; color:#fff; font-weight:700; font-size:12px; }
+  .sev1{ background:var(--s1);} .sev2{ background:var(--s2);} .sev3{ background:var(--s3);}
+  .sev4{ background:var(--s4);} .sev5{ background:var(--s5);}
+  .tag{ font-size:11px; font-weight:700; letter-spacing:.5px;
+        color:var(--s1); border:1px solid var(--s1); border-radius:4px; padding:1px 5px; }
+
+  .beds{ display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); }
+  .bed{ border:1px solid var(--line); border-radius:8px; padding:12px; text-align:center; }
+  .bed.free{ background:var(--free);} .bed.busy{ background:var(--busy);}
+  .bed .no{ font-size:12px; color:var(--muted);} .bed .who{ font-weight:700; margin-top:3px;}
+
+  .search{ display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+  .search input{
+    flex:1 1 180px; min-width:0; padding:9px 11px; font-size:14px;
+    border:1px solid var(--line); border-radius:7px;
+    background:var(--bg); color:var(--ink);
+  }
+  .empty{ color:var(--muted); font-size:14px; padding:14px 2px; }
+  footer{ max-width:1100px; margin:0 auto; padding:0 20px 36px; color:var(--muted); font-size:12px; }
+  .hide{ display:none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Hospital Triage Management System
+    <span>Read-only dashboard &middot; team indudhiman.ddnuk</span></h1>
+</header>
+
+<main>
+
+  <!-- The browser cannot open files from disk on its own, so the data
+       files written by the C++ program are selected here. Nothing on
+       this page is invented: every row comes from those files. -->
+  <div class="loader">
+    <p>Select the data files produced by the triage program
+       (<code>patients.txt</code>, <code>treatments.txt</code>, <code>beds.txt</code>).
+       They are written when you choose <b>Save and Exit</b>.</p>
+    <div class="files">
+      <label class="file">patients.txt
+        <input type="file" id="fPatients" accept=".txt"></label>
+      <label class="file">treatments.txt
+        <input type="file" id="fTreatments" accept=".txt"></label>
+      <label class="file">beds.txt
+        <input type="file" id="fBeds" accept=".txt"></label>
+    </div>
+    <div class="loaded" id="loadState">Nothing loaded yet.</div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="tabs">
+    <button class="tab on" data-view="queue">Waiting Queue</button>
+    <button class="tab"    data-view="treated">Treated</button>
+    <button class="tab"    data-view="beds">Beds</button>
+    <button class="tab"    data-view="history">Treatment History</button>
+  </div>
+
+  <section id="view-queue">
+    <h2>Waiting queue &mdash; in triage order</h2>
+    <div class="wrap"><table>
+      <thead><tr><th>#</th><th>Sev</th><th>ID</th><th>Name</th><th>Age</th>
+        <th>Symptoms</th><th>Arrival</th><th>Visit</th></tr></thead>
+      <tbody id="qBody"></tbody>
+    </table></div>
+    <div class="empty" id="qEmpty">No patient data loaded.</div>
+  </section>
+
+  <section id="view-treated" class="hide">
+    <h2>Treated patients</h2>
+    <div class="wrap"><table>
+      <thead><tr><th>Sev</th><th>ID</th><th>Name</th><th>Age</th>
+        <th>Symptoms</th><th>Arrival</th><th>Visit</th></tr></thead>
+      <tbody id="tBody"></tbody>
+    </table></div>
+    <div class="empty" id="tEmpty">No treated patients.</div>
+  </section>
+
+  <section id="view-beds" class="hide">
+    <h2>Bed occupancy</h2>
+    <div class="beds" id="bedGrid"></div>
+    <div class="empty" id="bEmpty">No bed data loaded.</div>
+  </section>
+
+  <section id="view-history" class="hide">
+    <h2>Treatment history</h2>
+    <div class="search">
+      <input id="hQuery" placeholder="Filter by patient ID, medicine or notes">
+    </div>
+    <div class="wrap"><table>
+      <thead><tr><th>Patient</th><th>Date</th><th>Vitals</th>
+        <th>Medicine</th><th>Notes</th></tr></thead>
+      <tbody id="hBody"></tbody>
+    </table></div>
+    <div class="empty" id="hEmpty">No treatment records loaded.</div>
+  </section>
+
+</main>
+
+<footer>
+  Educational college project. Severity is entered by staff; the system
+  performs no clinical assessment and is not for real medical use.
+</footer>
+
+<script>
+"use strict";
+
+/* ------------------------------------------------------------------
+   Parsing
+   The C++ side writes one record per line, fields separated by '|'.
+   Pipe is used instead of comma because a symptom may itself contain
+   a comma ("chest pain, sweating"), which would break a CSV split.
+   ------------------------------------------------------------------ */
+
+var patients  = [];   // {id,name,age,symptoms,severity,arrival,visit,status}
+var treatments = [];  // {pid,date,vitals,medicine,notes}
+var beds      = [];   // {no,pid}
+
+function splitLines(text){
+  return text.split(/\r?\n/).filter(function(l){ return l.trim() !== ""; });
+}
+
+function parsePatients(text){
+  return splitLines(text).map(function(line){
+    var f = line.split("|");
+    return {
+      id:       parseInt(f[0], 10),
+      name:     f[1] || "",
+      age:      parseInt(f[2], 10),
+      symptoms: f[3] || "",
+      severity: parseInt(f[4], 10),
+      arrival:  f[5] || "",
+      visit:    f[6] || "",
+      // The status column was added later. Files written before that
+      // have seven fields; treat a missing status as "waiting".
+      status:   (f[7] || "waiting").trim()
+    };
+  }).filter(function(p){ return !isNaN(p.id); });
+}
+
+function parseTreatments(text){
+  return splitLines(text).map(function(line){
+    var f = line.split("|");
+    return {
+      pid:      parseInt(f[0], 10),
+      date:     f[1] || "",
+      vitals:   f[2] || "",
+      medicine: f[3] || "",
+      notes:    f[4] || ""
+    };
+  }).filter(function(t){ return !isNaN(t.pid); });
+}
+
+function parseBeds(text){
+  return splitLines(text).map(function(line){
+    var f = line.split("|");
+    return { no: parseInt(f[0], 10), pid: parseInt(f[1], 10) };
+  }).filter(function(b){ return !isNaN(b.no); });
+}
+
+/* ------------------------------------------------------------------
+   Ordering
+   The same two rules the C++ higherPriority() uses: severity first,
+   then arrival time. Re-applying them here keeps the dashboard in
+   step with the program instead of trusting the file's line order.
+   ------------------------------------------------------------------ */
+function triageOrder(a, b){
+  if (a.severity !== b.severity) return a.severity - b.severity;
+  return a.arrival.localeCompare(b.arrival);
+}
+
+/* ---------------------------- helpers ---------------------------- */
+
+function esc(s){
+  return String(s).replace(/[&<>"]/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];
+  });
+}
+
+function prettyTime(t){
+  if (!/^\d{6}$/.test(t)) return t || "—";
+  return t.slice(0,2) + ":" + t.slice(2,4) + ":" + t.slice(4,6);
+}
+
+function sevCell(n){
+  var cls = (n >= 1 && n <= 5) ? "sev sev" + n : "sev";
+  return '<span class="' + cls + '">' + (isNaN(n) ? "?" : n) + "</span>";
+}
+
+/* ---------------------------- rendering -------------------------- */
+
+function render(){
+  var waiting = patients.filter(function(p){ return p.status !== "treated"; })
+                        .sort(triageOrder);
+  var treated = patients.filter(function(p){ return p.status === "treated"; });
+
+  renderStats(waiting, treated);
+  renderQueue(waiting);
+  renderTreated(treated);
+  renderBeds();
+  renderHistory();
+}
+
+function renderStats(waiting, treated){
+  var critical = waiting.filter(function(p){ return p.severity === 1; }).length;
+  var busyBeds = beds.filter(function(b){ return b.pid !== 0; }).length;
+  var bedText  = beds.length ? (beds.length - busyBeds) + " / " + beds.length : "—";
+
+  var cards = [
+    ["Waiting",        waiting.length],
+    ["Critical (sev 1)", critical],
+    ["Treated",        treated.length],
+    ["Beds free",      bedText],
+    ["Treatment records", treatments.length]
+  ];
+
+  document.getElementById("stats").innerHTML = cards.map(function(c){
+    return '<div class="stat"><div class="n">' + c[1] +
+           '</div><div class="k">' + c[0] + "</div></div>";
+  }).join("");
+}
+
+function renderQueue(rows){
+  var body  = document.getElementById("qBody");
+  var empty = document.getElementById("qEmpty");
+
+  body.innerHTML = rows.map(function(p, i){
+    return "<tr><td>" + (i + 1) + "</td><td>" + sevCell(p.severity) +
+      "</td><td>" + p.id + "</td><td>" + esc(p.name) +
+      "</td><td>" + (isNaN(p.age) ? "—" : p.age) +
+      "</td><td>" + esc(p.symptoms) +
+      "</td><td>" + prettyTime(p.arrival) +
+      "</td><td>" + (p.severity === 1
+          ? '<span class="tag">EMERGENCY</span>'
+          : esc(p.visit)) + "</td></tr>";
+  }).join("");
+
+  empty.classList.toggle("hide", rows.length > 0);
+  empty.textContent = patients.length ? "Queue is empty." : "No patient data loaded.";
+}
+
+function renderTreated(rows){
+  var body  = document.getElementById("tBody");
+  var empty = document.getElementById("tEmpty");
+
+  body.innerHTML = rows.map(function(p){
+    return "<tr><td>" + sevCell(p.severity) + "</td><td>" + p.id +
+      "</td><td>" + esc(p.name) + "</td><td>" + (isNaN(p.age) ? "—" : p.age) +
+      "</td><td>" + esc(p.symptoms) + "</td><td>" + prettyTime(p.arrival) +
+      "</td><td>" + esc(p.visit) + "</td></tr>";
+  }).join("");
+
+  empty.classList.toggle("hide", rows.length > 0);
+}
+
+function renderBeds(){
+  var grid  = document.getElementById("bedGrid");
+  var empty = document.getElementById("bEmpty");
+
+  grid.innerHTML = beds.map(function(b){
+    var busy = b.pid !== 0;
+    return '<div class="bed ' + (busy ? "busy" : "free") + '">' +
+           '<div class="no">Bed ' + b.no + "</div>" +
+           '<div class="who">' + (busy ? "#" + b.pid : "free") + "</div></div>";
+  }).join("");
+
+  empty.classList.toggle("hide", beds.length > 0);
+}
+
+function renderHistory(){
+  var q     = document.getElementById("hQuery").value.trim().toLowerCase();
+  var body  = document.getElementById("hBody");
+  var empty = document.getElementById("hEmpty");
+
+  var rows = treatments.filter(function(t){
+    if (!q) return true;
+    return (String(t.pid) + " " + t.date + " " + t.vitals + " " +
+            t.medicine + " " + t.notes).toLowerCase().indexOf(q) !== -1;
+  });
+
+  body.innerHTML = rows.map(function(t){
+    var who = patients.filter(function(p){ return p.id === t.pid; })[0];
+    var label = who ? ("#" + t.pid + " " + esc(who.name)) : ("#" + t.pid);
+    return "<tr><td>" + label + "</td><td>" + esc(t.date) +
+      "</td><td>" + esc(t.vitals) + "</td><td>" + esc(t.medicine) +
+      "</td><td>" + esc(t.notes) + "</td></tr>";
+  }).join("");
+
+  empty.classList.toggle("hide", rows.length > 0);
+  empty.textContent = treatments.length
+    ? "No record matches that filter."
+    : "No treatment records loaded.";
+}
+
+/* ---------------------------- wiring ----------------------------- */
+
+var state = { patients:false, treatments:false, beds:false };
+
+function note(){
+  var done = Object.keys(state).filter(function(k){ return state[k]; });
+  document.getElementById("loadState").innerHTML =
+    done.length ? "Loaded: <b>" + done.join(", ") + "</b>" : "Nothing loaded yet.";
+}
+
+function hookFile(inputId, key, parser, target){
+  document.getElementById(inputId).addEventListener("change", function(e){
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(){
+      try{
+        var data = parser(reader.result);
+        if (target === "patients")   patients   = data;
+        if (target === "treatments") treatments = data;
+        if (target === "beds")       beds       = data;
+        state[key] = true;
+        note();
+        render();
+      }catch(err){
+        document.getElementById("loadState").textContent =
+          "Could not read that file: " + err.message;
+      }
+    };
+    reader.onerror = function(){
+      document.getElementById("loadState").textContent = "Could not read that file.";
+    };
+    reader.readAsText(file);
+  });
+}
+
+hookFile("fPatients",   "patients",   parsePatients,   "patients");
+hookFile("fTreatments", "treatments", parseTreatments, "treatments");
+hookFile("fBeds",       "beds",       parseBeds,       "beds");
+
+document.getElementById("hQuery").addEventListener("input", renderHistory);
+
+var tabs = document.querySelectorAll(".tab");
+for (var i = 0; i < tabs.length; i++){
+  tabs[i].addEventListener("click", function(e){
+    for (var j = 0; j < tabs.length; j++) tabs[j].classList.remove("on");
+    e.target.classList.add("on");
+    var want = e.target.getAttribute("data-view");
+    ["queue","treated","beds","history"].forEach(function(v){
+      document.getElementById("view-" + v).classList.toggle("hide", v !== want);
+    });
+  });
+}
+
+render();
+</script>
+</body>
+</html>

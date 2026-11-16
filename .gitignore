@@ -1,0 +1,7 @@
+bin/
+*.exe
+*.o
+# runtime data written next to the executable
+/patients.txt
+/treatments.txt
+/beds.txt
